@@ -1,0 +1,72 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Environment Variables
+.env
+.env.*
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# ==========================
+# FastAPI / Alembic
+# ==========================
+alembic/versions/__pycache__/
+
+# ==========================
+# VS Code
+# ==========================
+.vscode/
+
+# ==========================
+# JetBrains
+# ==========================
+.idea/
+
+# ==========================
+# OS Files
+# ==========================
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Logs
+# ==========================
+*.log
+
+# ==========================
+# Node / React
+# ==========================
+node_modules/
+
+# Build folders
+dist/
+build/
+
+# Vite
+frontend/dist/
+
+# ==========================
+# Docker
+# ==========================
+*.pid
+
+# ==========================
+# Misc
+# ==========================
+tmp/
+temp/
