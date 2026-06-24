@@ -1,10 +1,8 @@
 from fastapi import APIRouter
-router = APIRouter(
-    prefix="/auth",
-    tags=["Authentication"]
-)
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database.deps import get_db
@@ -15,10 +13,16 @@ from app.services.user_service import (
     get_user_by_username,
     create_user
 )
-from app.schemas.user import UserLogin
 from app.core.security import hash_password
 from app.core.security import verify_password
 from app.core.jwt import create_access_token
+
+router = APIRouter(
+    prefix="/auth",
+    tags=["Authentication"]
+)
+
+
 @router.post(
     "/register",
     response_model=UserResponse
@@ -66,36 +70,41 @@ def register(
         raise HTTPException(
             status_code=400,
             detail="Username or email already exists"
-        ) from exc
+    ) from exc
     return user
+
+
 @router.post("/login")
 def login(
-    payload: UserLogin,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
+    email = form_data.username
     user = get_user_by_email(
         db,
-        payload.email
+        email
     )
     if not user:
         raise HTTPException(
-            status_code = 401,
-            detail = "Invalid credentials"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"}
         )
     if not verify_password(
-        payload.password,
+        form_data.password,
         user.password_hash
     ):
         raise HTTPException(
-            status_code = 401,
-            detail = "Invalid credentials"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"}
         )
     access_token = create_access_token(
         {
             "sub": str(user.id)
         }
     )
-    return{
+    return {
         "access_token": access_token,
         "token_type": "bearer"
     }
