@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from app.models.conversation import Conversation
 from app.models.conversation_member import ConversationMember
+from app.models.conversation import Conversation
+from app.models.conversation_member import ConversationMember
 def create_conversation(
     db: Session,
     name: str | None,
@@ -22,3 +24,19 @@ def create_conversation(
     db.commit()
     db.refresh(conversation)
     return conversation
+def get_user_conversations(
+    db: Session,
+    user_id: int
+):
+    return (
+        db.query(Conversation)
+        .join(
+            ConversationMember,
+            Conversation.id ==
+            ConversationMember.conversation_id
+        )
+        .filter(
+            ConversationMember.user_id == user_id
+        )
+        .all()
+    )

@@ -3,10 +3,14 @@ from fastapi import Depends
 from app.api.dependencies import get_current_user
 from app.schemas.conversation import (
     ConversationCreate,
-    ConversationResponse
+    ConversationResponse,
+    ConversationListResponse
 )
 from app.services.conversation_service import (
     create_conversation
+)
+from app.services.conversation_service import (
+    get_user_conversations
 )
 from app.database.deps import get_db
 from sqlalchemy.orm import Session
@@ -30,3 +34,16 @@ def create_new_conversation(
         creator_id=current_user.id
     )
     return conversation
+@router.get(
+    "",
+    response_model=list[ConversationListResponse]
+)
+def list_conversations(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
+    return get_user_conversations(
+        db,
+        current_user.id
+    )
