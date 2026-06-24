@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import status
 from sqlalchemy.orm import Session
@@ -9,10 +8,11 @@ from app.api.dependencies import get_current_user
 from app.database.deps import get_db
 from app.schemas.message import MessageCreate
 from app.schemas.message import MessageResponse
+from app.schemas.message import MessageUpdate
 from app.services.message_service import (
-    get_conversation_by_id,
+    delete_message,
+    edit_message,
     get_conversation_messages,
-    is_conversation_member,
     send_message
 )
 
@@ -31,26 +31,6 @@ def create_message(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    conversation = get_conversation_by_id(
-        db,
-        payload.conversation_id
-    )
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conversation not found"
-        )
-
-    if not is_conversation_member(
-        db,
-        payload.conversation_id,
-        current_user.id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not a member of this conversation"
-        )
-
     return send_message(
         db=db,
         conversation_id=payload.conversation_id,
@@ -77,29 +57,45 @@ def list_conversation_messages(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    conversation = get_conversation_by_id(
-        db,
-        conversation_id
-    )
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conversation not found"
-        )
-
-    if not is_conversation_member(
-        db,
-        conversation_id,
-        current_user.id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not a member of this conversation"
-        )
-
     return get_conversation_messages(
         db=db,
         conversation_id=conversation_id,
+        user_id=current_user.id,
         page=page,
         limit=limit
     )
+
+
+@router.patch(
+    "/messages/{message_id}",
+    response_model=MessageResponse
+)
+def update_message(
+    message_id: int,
+    payload: MessageUpdate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return edit_message(
+        db=db,
+        message_id=message_id,
+        user_id=current_user.id,
+        content=payload.content
+    )
+
+
+@router.delete(
+    "/messages/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def remove_message(
+    message_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    delete_message(
+        db=db,
+        message_id=message_id,
+        user_id=current_user.id
+    )
+    return None
