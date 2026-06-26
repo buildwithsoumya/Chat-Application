@@ -8,9 +8,10 @@ class ConnectionManager:
     """Manage active WebSocket connections for the application."""
 
     def __init__(self) -> None:
-        """Initialize in-memory user connections and room membership."""
+        """Initialize in-memory user connections, rooms, and presence."""
         self.active_connections: dict[int, WebSocket] = {}
         self.rooms: dict[int, set[int]] = {}
+        self.online_users: set[int] = set()
 
     async def connect(
         self,
@@ -24,6 +25,18 @@ class ConnectionManager:
     def disconnect(self, user_id: int) -> None:
         """Remove a user's WebSocket connection from the registry."""
         self.active_connections.pop(user_id, None)
+
+    def mark_online(self, user_id: int) -> None:
+        """Mark a user as online."""
+        self.online_users.add(user_id)
+
+    def mark_offline(self, user_id: int) -> None:
+        """Mark a user as offline."""
+        self.online_users.discard(user_id)
+
+    def is_online(self, user_id: int) -> bool:
+        """Return whether a user is currently online."""
+        return user_id in self.online_users
 
     async def send_personal_message(
         self,

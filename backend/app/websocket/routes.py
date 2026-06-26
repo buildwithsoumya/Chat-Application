@@ -120,6 +120,24 @@ async def handle_typing_event(
     )
 
 
+async def broadcast_presence_event(
+    conversation_id: int,
+    user_id: int,
+    status_value: str
+) -> None:
+    """Broadcast a user's presence status to a conversation room."""
+    await connection_manager.broadcast_to_room(
+        conversation_id=conversation_id,
+        payload={
+            "type": "presence",
+            "data": {
+                "user_id": user_id,
+                "status": status_value
+            }
+        }
+    )
+
+
 async def dispatch_event(
     payload: dict[str, Any],
     conversation_id: int,
@@ -202,6 +220,12 @@ async def websocket_endpoint(
         conversation_id=conversation_id,
         user_id=user.id
     )
+    connection_manager.mark_online(user.id)
+    await broadcast_presence_event(
+        conversation_id=conversation_id,
+        user_id=user.id,
+        status_value="online"
+    )
     try:
         while True:
             try:
@@ -227,6 +251,12 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         pass
     finally:
+        connection_manager.mark_offline(user.id)
+        await broadcast_presence_event(
+            conversation_id=conversation_id,
+            user_id=user.id,
+            status_value="offline"
+        )
         connection_manager.leave_room(
             conversation_id=conversation_id,
             user_id=user.id
