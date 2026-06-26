@@ -1,4 +1,7 @@
+from typing import Any
+
 from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 
 
 class ConnectionManager:
@@ -25,12 +28,38 @@ class ConnectionManager:
     async def send_personal_message(
         self,
         user_id: int,
-        message: str
+        payload: dict[str, Any]
     ) -> None:
-        """Send a text message to a connected user."""
+        """Send a JSON payload to a connected user."""
         websocket = self.active_connections.get(user_id)
         if websocket is not None:
-            await websocket.send_text(message)
+            await websocket.send_json(payload)
+
+    async def broadcast_to_room(
+        self,
+        conversation_id: int,
+        payload: dict[str, Any]
+    ) -> None:
+        """Send a JSON payload to every connected user in a room."""
+        disconnected_user_ids: list[int] = []
+
+        for user_id in self.get_room_members(conversation_id):
+            websocket = self.active_connections.get(user_id)
+            if websocket is None:
+                disconnected_user_ids.append(user_id)
+                continue
+
+            try:
+                await websocket.send_json(payload)
+            except (RuntimeError, WebSocketDisconnect):
+                disconnected_user_ids.append(user_id)
+
+        for user_id in disconnected_user_ids:
+            self.leave_room(
+                conversation_id=conversation_id,
+                user_id=user_id
+            )
+            self.disconnect(user_id)
 
     def join_room(
         self,
