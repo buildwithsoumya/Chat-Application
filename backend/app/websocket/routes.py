@@ -1,4 +1,5 @@
 from json import JSONDecodeError
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -35,6 +36,131 @@ async def send_error_event(
             }
         }
     )
+
+
+def normalize_message_payload(
+    payload: dict[str, Any],
+    conversation_id: int
+) -> MessageCreate:
+    """Validate an incoming message event and return message data."""
+    data = payload.get("data")
+    if data is None and "content" in payload:
+        data = payload
+    if not isinstance(data, dict):
+        raise ValueError("Message event data must be an object")
+
+    return MessageCreate(
+        conversation_id=conversation_id,
+        content=data.get("content")
+    )
+
+
+async def handle_message_event(
+    payload: dict[str, Any],
+    conversation_id: int,
+    user_id: int,
+    db: Session,
+    websocket: WebSocket
+) -> bool:
+    """Persist a message event and broadcast the saved message."""
+    try:
+        message_payload = normalize_message_payload(
+            payload=payload,
+            conversation_id=conversation_id
+        )
+    except (ValueError, ValidationError):
+        await send_error_event(
+            websocket=websocket,
+            message="Invalid message payload"
+        )
+        return True
+
+    try:
+        message = send_message(
+            db=db,
+            conversation_id=message_payload.conversation_id,
+            sender_id=user_id,
+            content=message_payload.content
+        )
+    except HTTPException:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return False
+
+    await connection_manager.broadcast_to_room(
+        conversation_id=conversation_id,
+        payload={
+            "type": "message",
+            "data": {
+                "id": message.id,
+                "conversation_id": message.conversation_id,
+                "sender_id": message.sender_id,
+                "content": message.content,
+                "created_at": message.created_at.isoformat()
+            }
+        }
+    )
+    return True
+
+
+async def handle_typing_event(
+    event_type: str,
+    conversation_id: int,
+    user_id: int
+) -> None:
+    """Broadcast a transient typing event to a conversation room."""
+    await connection_manager.broadcast_to_room(
+        conversation_id=conversation_id,
+        payload={
+            "type": event_type,
+            "data": {
+                "conversation_id": conversation_id,
+                "user_id": user_id
+            }
+        }
+    )
+
+
+async def dispatch_event(
+    payload: dict[str, Any],
+    conversation_id: int,
+    user_id: int,
+    db: Session,
+    websocket: WebSocket
+) -> bool:
+    """Route an incoming WebSocket event to the correct handler."""
+    event_type = payload.get("type")
+    if event_type is None and "content" in payload:
+        event_type = "message"
+
+    if event_type == "message":
+        return await handle_message_event(
+            payload=payload,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            db=db,
+            websocket=websocket
+        )
+
+    if event_type in {"typing_start", "typing_stop"}:
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            await send_error_event(
+                websocket=websocket,
+                message="Invalid typing event payload"
+            )
+            return True
+        await handle_typing_event(
+            event_type=event_type,
+            conversation_id=conversation_id,
+            user_id=user_id
+        )
+        return True
+
+    await send_error_event(
+        websocket=websocket,
+        message="Unknown event type"
+    )
+    return True
 
 
 @router.websocket("/ws/{conversation_id}")
@@ -80,41 +206,24 @@ async def websocket_endpoint(
         while True:
             try:
                 payload = await websocket.receive_json()
-                message_payload = MessageCreate(
-                    conversation_id=conversation_id,
-                    content=payload.get("content")
-                )
-            except (AttributeError, JSONDecodeError, ValidationError):
+                if not isinstance(payload, dict):
+                    raise ValueError("Event payload must be an object")
+            except (JSONDecodeError, ValueError):
                 await send_error_event(
                     websocket=websocket,
-                    message="Invalid message payload"
+                    message="Malformed event payload"
                 )
                 continue
 
-            try:
-                message = send_message(
-                    db=db,
-                    conversation_id=message_payload.conversation_id,
-                    sender_id=user.id,
-                    content=message_payload.content
-                )
-            except HTTPException:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            await connection_manager.broadcast_to_room(
+            should_continue = await dispatch_event(
+                payload=payload,
                 conversation_id=conversation_id,
-                payload={
-                    "type": "message",
-                    "data": {
-                        "id": message.id,
-                        "conversation_id": message.conversation_id,
-                        "sender_id": message.sender_id,
-                        "content": message.content,
-                        "created_at": message.created_at.isoformat()
-                    }
-                }
+                user_id=user.id,
+                db=db,
+                websocket=websocket
             )
+            if not should_continue:
+                return
     except WebSocketDisconnect:
         pass
     finally:
