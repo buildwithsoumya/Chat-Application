@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { conversationService, type Conversation } from "@/services/conversation";
+import { messageService } from "@/services/messageService";
+import { toast } from "@/store/toastStore";
 
 export interface Message {
   id: string;
   conversationId: string;
   content: string;
   senderId: string;
-  senderName: string;
+  senderName: string; // The backend ApiMessage currently doesn't provide this directly, we'll try to resolve it via participant matching in UI
   senderAvatar?: string;
   timestamp: string;
   status: "sending" | "sent" | "delivered" | "read";
@@ -19,16 +21,17 @@ interface ChatState {
   draftMessages: Record<string, string>; // Keyed by conversationId
   isLoading: boolean;
   isLoadingMessages: boolean;
+  sendingMessage: boolean;
   error: string | null;
 
   fetchConversations: () => Promise<void>;
-  createConversation: (data: { name: string; isGroup: boolean }) => Promise<void>;
+  createConversation: (data: { name: string; isGroup: boolean; participant_ids?: string[] }) => Promise<void>;
   selectConversation: (id: string) => void;
   
-  // Phase F4: Mock Actions
-  fetchMessages: (conversationId: string) => void;
-  sendMessage: (conversationId: string, content: string, currentUserId: string, currentUserName: string) => void;
+  fetchMessages: (conversationId: string) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, currentUserId: string, currentUserName: string) => Promise<void>;
   setDraft: (conversationId: string, content: string) => void;
+  clearMessages: (conversationId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -38,6 +41,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   draftMessages: {},
   isLoading: false,
   isLoadingMessages: false,
+  sendingMessage: false,
   error: null,
 
   fetchConversations: async () => {
@@ -46,6 +50,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const conversations = await conversationService.fetchConversations();
       set({ conversations, isLoading: false });
     } catch (error: any) {
+      toast.error("Failed to load conversations", error.response?.data?.detail || error.message);
       set({ 
         error: error.response?.data?.detail || "Failed to load conversations", 
         isLoading: false 
@@ -65,6 +70,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isLoading: false 
       });
     } catch (error: any) {
+      toast.error("Failed to create conversation", error.response?.data?.detail || error.message);
       set({ 
         error: error.response?.data?.detail || "Failed to create conversation", 
         isLoading: false 
@@ -74,95 +80,106 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectConversation: (id: string) => {
-    const conversation = get().conversations.find((c) => c.id === id);
+    const conversation = get().conversations.find((c) => String(c.id) === String(id));
     if (conversation) {
       set({ selectedConversation: conversation });
       get().fetchMessages(id);
     }
   },
 
-  fetchMessages: (conversationId: string) => {
+  fetchMessages: async (conversationId: string) => {
     set({ isLoadingMessages: true });
-    
-    // Simulate network delay
-    setTimeout(() => {
-      const existing = get().messages[conversationId];
-      if (!existing) {
-        // Create mock data
-        const now = new Date();
-        const mockMessages: Message[] = [
-          {
-            id: `msg-${Date.now()}-1`,
-            conversationId,
-            content: "Hey there! How is the project going?",
-            senderId: "mock-user-1",
-            senderName: "Alice",
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60).toISOString(),
-            status: "read",
-          },
-          {
-            id: `msg-${Date.now()}-2`,
-            conversationId,
-            content: "It's going great! Just finished the auth module.",
-            senderId: "me", // We will match this with the logged in user ID in components
-            senderName: "Me",
-            timestamp: new Date(now.getTime() - 1000 * 60 * 30).toISOString(),
-            status: "read",
-          },
-          {
-            id: `msg-${Date.now()}-3`,
-            conversationId,
-            content: "Awesome, let's catch up later today.",
-            senderId: "mock-user-1",
-            senderName: "Alice",
-            timestamp: new Date(now.getTime() - 1000 * 60 * 5).toISOString(),
-            status: "read",
-          }
-        ];
-        
-        set((state) => ({
-          messages: { ...state.messages, [conversationId]: mockMessages },
-          isLoadingMessages: false
-        }));
-      } else {
-        set({ isLoadingMessages: false });
-      }
-    }, 500);
+    try {
+      const apiMessages = await messageService.fetchMessages(conversationId);
+      
+      // Map API messages to our frontend Message interface
+      const mappedMessages: Message[] = apiMessages.map(msg => ({
+        id: String(msg.id),
+        conversationId: String(msg.conversation_id),
+        content: msg.content,
+        senderId: String(msg.sender_id),
+        senderName: "User", // Fallback, will be resolved in component
+        timestamp: msg.created_at,
+        status: "sent"
+      }));
+
+      // Ensure chronological order
+      mappedMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      set((state) => ({
+        messages: { ...state.messages, [conversationId]: mappedMessages },
+        isLoadingMessages: false
+      }));
+    } catch (error: any) {
+      toast.error("Network Error", "Could not fetch message history.");
+      set({ isLoadingMessages: false });
+    }
   },
 
-  sendMessage: (conversationId, content, currentUserId, currentUserName) => {
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
+  sendMessage: async (conversationId, content, currentUserId, currentUserName) => {
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
       conversationId,
       content,
       senderId: currentUserId,
       senderName: currentUserName,
       timestamp: new Date().toISOString(),
-      status: "sent",
+      status: "sending",
     };
 
+    // Optimistic Update & Clear Draft
     set((state) => {
       const currentMessages = state.messages[conversationId] || [];
       return {
+        sendingMessage: true,
         messages: {
           ...state.messages,
-          [conversationId]: [...currentMessages, newMessage]
+          [conversationId]: [...currentMessages, optimisticMessage]
         },
         draftMessages: {
           ...state.draftMessages,
-          [conversationId]: "" // clear draft
+          [conversationId]: "" 
         }
       };
     });
     
-    // Simulate delivery after 1s
-    setTimeout(() => {
+    try {
+      const apiMessage = await messageService.sendMessage(conversationId, content);
+      
+      // Replace optimistic message with actual data from backend
       set((state) => {
         const msgs = state.messages[conversationId] || [];
-        const updated = msgs.map(m => m.id === newMessage.id ? { ...m, status: "delivered" as const } : m);
-        return { messages: { ...state.messages, [conversationId]: updated } };
+        const updated = msgs.map(m => m.id === tempId ? {
+          ...m,
+          id: String(apiMessage.id),
+          timestamp: apiMessage.created_at,
+          status: "sent" as const
+        } : m);
+        
+        return { 
+          sendingMessage: false,
+          messages: { ...state.messages, [conversationId]: updated } 
+        };
       });
-    }, 1000);
+    } catch (error: any) {
+      toast.error("Failed to send message", "Please try again.");
+      
+      // Remove optimistic message on failure
+      set((state) => {
+        const msgs = state.messages[conversationId] || [];
+        const filtered = msgs.filter(m => m.id !== tempId);
+        
+        return { 
+          sendingMessage: false,
+          messages: { ...state.messages, [conversationId]: filtered },
+          draftMessages: {
+            ...state.draftMessages,
+            [conversationId]: content // restore draft
+          }
+        };
+      });
+    }
   },
 
   setDraft: (conversationId, content) => {
@@ -172,5 +189,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [conversationId]: content
       }
     }));
+  },
+
+  clearMessages: (conversationId) => {
+    set((state) => {
+      const { [conversationId]: removed, ...rest } = state.messages;
+      return { messages: rest };
+    });
   }
 }));

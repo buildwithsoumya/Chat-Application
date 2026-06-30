@@ -62,11 +62,27 @@ export function MessageList() {
           const prevMsg = idx > 0 ? activeMessages[idx - 1] : null
           const showAvatar = prevMsg?.senderId !== msg.senderId
 
+          // Find sender info from participants
+          const isOwn = String(msg.senderId) === String(user?.id) || msg.senderId === "me"
+          let senderName = msg.senderName
+          let senderAvatar = msg.senderAvatar
+
+          if (!isOwn && selectedConversation?.participants) {
+            const participant = selectedConversation.participants.find(p => String(p.id) === String(msg.senderId))
+            if (participant) {
+              senderName = participant.username
+              senderAvatar = participant.avatar
+            }
+          }
+
+          // Use the updated senderName/Avatar
+          const displayMessage = { ...msg, senderName, senderAvatar }
+
           return (
             <MessageBubble
               key={msg.id}
-              message={msg}
-              isOwn={msg.senderId === user?.id || msg.senderId === "me"}
+              message={displayMessage}
+              isOwn={isOwn}
               showAvatar={showAvatar}
             />
           )
