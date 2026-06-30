@@ -21,24 +21,48 @@ export const registerSchema = z
 export type LoginFormData = z.infer<typeof loginSchema>;
 export type RegisterFormData = z.infer<typeof registerSchema>;
 
-export interface AuthResponse {
-  token: string;
-  user: {
-    id: string;
-    username: string;
-    email: string;
-    avatar?: string;
-  };
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  avatar?: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
 }
 
 export const authService = {
-  async login(data: LoginFormData): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>("/auth/login", data);
-    return response.data;
+  async login(data: LoginFormData): Promise<{ token: string; user: User }> {
+    // FastAPI OAuth2PasswordRequestForm expects x-www-form-urlencoded
+    const formData = new URLSearchParams();
+    formData.append("username", data.email); // FastAPI expects 'username' field for email
+    formData.append("password", data.password);
+
+    const response = await api.post<LoginResponse>("/auth/login", formData, {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+    
+    const token = response.data.access_token;
+    
+    // Fetch the user data using the token
+    const userResponse = await api.get<User>("/users/me", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    return {
+      token,
+      user: userResponse.data
+    };
   },
 
-  async register(data: Omit<RegisterFormData, "confirmPassword">): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>("/auth/register", data);
+  async register(data: Omit<RegisterFormData, "confirmPassword">): Promise<User> {
+    const response = await api.post<User>("/auth/register", data);
     return response.data;
   },
 

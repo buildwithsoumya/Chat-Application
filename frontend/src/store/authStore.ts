@@ -62,12 +62,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (data: Omit<RegisterFormData, "confirmPassword">) => {
     set({ isLoading: true, error: null })
     try {
-      const response = await authService.register(data)
-      localStorage.setItem('token', response.token)
+      await authService.register(data)
+      // We don't get a token back on register in this API, so user must login after
       set({ 
-        user: response.user, 
-        token: response.token,
-        isAuthenticated: true, 
         isLoading: false 
       })
     } catch (error: any) {
