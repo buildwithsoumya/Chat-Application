@@ -15,14 +15,22 @@ export function ConversationList() {
   } = useChatStore()
   
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
 
   useEffect(() => {
     fetchConversations()
   }, [fetchConversations])
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   const filteredConversations = useMemo(() => {
-    if (!searchQuery.trim()) return conversations;
-    const query = searchQuery.toLowerCase();
+    if (!debouncedQuery.trim()) return conversations;
+    const query = debouncedQuery.toLowerCase();
     return conversations.filter(conv => {
       const nameMatch = conv.name?.toLowerCase().includes(query);
       const participantMatch = conv.participants.some(p => p.username.toLowerCase().includes(query));

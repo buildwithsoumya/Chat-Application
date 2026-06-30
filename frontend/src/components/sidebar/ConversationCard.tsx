@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { type Conversation } from "@/services/conversation"
@@ -9,7 +10,7 @@ interface ConversationCardProps {
   onClick: () => void
 }
 
-export function ConversationCard({ conversation, isSelected, onClick }: ConversationCardProps) {
+export const ConversationCard = memo(function ConversationCard({ conversation, isSelected, onClick }: ConversationCardProps) {
   // If it's a group, use the name, otherwise use the other participant's username
   // For simplicity, we just use the name or first participant
   const displayName = conversation.name || conversation.participants[0]?.username || "Unknown"
@@ -53,4 +54,4 @@ export function ConversationCard({ conversation, isSelected, onClick }: Conversa
       ) : null}
     </div>
   )
-}
+})

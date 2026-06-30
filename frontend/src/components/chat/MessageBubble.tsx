@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { type Message } from "@/store/chatStore"
 import { MessageStatus } from "./MessageStatus"
@@ -9,7 +10,7 @@ interface MessageBubbleProps {
   showAvatar?: boolean
 }
 
-export function MessageBubble({ message, isOwn, showAvatar = true }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, isOwn, showAvatar = true }: MessageBubbleProps) {
   // Extract time from timestamp (e.g. 10:45 AM)
   const timeStr = new Date(message.timestamp).toLocaleTimeString([], { 
     hour: '2-digit', 
@@ -56,4 +57,4 @@ export function MessageBubble({ message, isOwn, showAvatar = true }: MessageBubb
       </div>
     </div>
   )
-}
+})
