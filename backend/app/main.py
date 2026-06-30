@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
 from app.api.messages import router as message_router
 from app.api.users import router as user_router
+from app.api.conversations import router as conversation_router
 
 app = FastAPI(title="ChatSphere API")
 
@@ -17,6 +18,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(message_router)
+app.include_router(conversation_router)
 
 
 @app.get("/")

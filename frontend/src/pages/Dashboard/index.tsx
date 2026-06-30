@@ -3,8 +3,12 @@ import { useChatStore } from "@/store/chatStore"
 import { Button } from "@/components/ui/button"
 import { ConversationList } from "@/components/sidebar/ConversationList"
 import { CreateConversationModal } from "@/components/sidebar/CreateConversationModal"
+import { ChatHeader } from "@/components/chat/ChatHeader"
+import { MessageList } from "@/components/chat/MessageList"
+import { MessageComposer } from "@/components/chat/MessageComposer"
+import { EmptyChat } from "@/components/chat/EmptyChat"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { LogOut, Settings } from "lucide-react"
+import { LogOut } from "lucide-react"
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore()
@@ -53,40 +57,12 @@ export default function Dashboard() {
       <div className="flex-1 bg-surface flex flex-col relative h-full">
         {selectedConversation ? (
           <>
-            {/* Chat Header */}
-            <div className="h-16 shrink-0 border-b border-border flex items-center justify-between px-6 bg-surface/50 backdrop-blur-sm z-10">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9 border border-border">
-                  <AvatarImage src={selectedConversation.participants[0]?.avatar} />
-                  <AvatarFallback className="bg-primary/10 text-primary">
-                    {activeName.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="font-semibold">{activeName}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedConversation.isGroup ? "Group Chat" : "Direct Message"}
-                  </p>
-                </div>
-              </div>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </div>
-            
-            {/* Messages Area Placeholder */}
-            <div className="flex-1 flex items-center justify-center bg-bgPrimary/30">
-              <p className="text-muted-foreground text-sm">Messages will load here in the next phase</p>
-            </div>
+            <ChatHeader conversation={selectedConversation} />
+            <MessageList />
+            <MessageComposer />
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-bgPrimary/30">
-            <div className="h-16 w-16 rounded-full bg-sidebar flex items-center justify-center mb-4 shadow-sm border border-border">
-              <span className="text-2xl">💬</span>
-            </div>
-            <p className="font-medium">Your Messages</p>
-            <p className="text-sm mt-1">Select a conversation or start a new one.</p>
-          </div>
+          <EmptyChat />
         )}
       </div>
 
