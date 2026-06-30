@@ -12,6 +12,8 @@ export function MessageComposer() {
   const conversationId = selectedConversation?.id
   const draft = conversationId ? draftMessages[conversationId] || "" : ""
 
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const handleInput = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -19,10 +21,35 @@ export function MessageComposer() {
     }
   }
 
+  const handleTyping = (val: string) => {
+    setDraft(conversationId!, val)
+    
+    // Typing indicator logic
+    useChatStore.getState().sendTypingIndicator(true)
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    
+    typingTimeoutRef.current = setTimeout(() => {
+      useChatStore.getState().sendTypingIndicator(false)
+    }, 1500)
+  }
+
   // Adjust height on mount/draft change
   useEffect(() => {
     handleInput()
   }, [draft])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+        useChatStore.getState().sendTypingIndicator(false)
+      }
+    }
+  }, [])
 
   const handleSend = () => {
     if (!draft.trim() || !conversationId || !user) return
@@ -50,7 +77,7 @@ export function MessageComposer() {
         <textarea
           ref={textareaRef}
           value={draft}
-          onChange={(e) => setDraft(conversationId, e.target.value)}
+          onChange={(e) => handleTyping(e.target.value)}
           onKeyDown={handleKeyDown}
           onInput={handleInput}
           placeholder="Type a message..."
