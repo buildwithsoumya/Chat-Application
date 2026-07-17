@@ -25,24 +25,26 @@ router = APIRouter(
 
 async def send_error_event(
     websocket: WebSocket,
-    message: str
+    message: str,
+    client_message_id: str | None = None
 ) -> None:
     """Send a structured WebSocket error event."""
-    await websocket.send_json(
-        {
-            "type": "error",
-            "data": {
-                "message": message
-            }
+    payload = {
+        "type": "error",
+        "data": {
+            "message": message
         }
-    )
+    }
+    if client_message_id is not None:
+        payload["data"]["client_message_id"] = client_message_id
+    await websocket.send_json(payload)
 
 
 def normalize_message_payload(
     payload: dict[str, Any],
     conversation_id: int
-) -> MessageCreate:
-    """Validate a message event and return persistence-ready data."""
+) -> tuple[MessageCreate, str | None]:
+    """Validate a message event and return persistence-ready data plus client id."""
     data = payload.get("data")
     if data is None and "content" in payload:
         data = payload
@@ -53,15 +55,23 @@ def normalize_message_payload(
     if content is None:
         raise ValueError("Message content is required")
 
-    return MessageCreate(
+    client_message_id = data.get("client_message_id")
+    if client_message_id is not None and not isinstance(client_message_id, str):
+        raise ValueError("client_message_id must be a string")
+
+    message_create = MessageCreate(
         conversation_id=conversation_id,
         content=content
     )
+    return message_create, client_message_id
 
 
-def message_event(message) -> dict[str, Any]:
+def message_event(
+    message,
+    client_message_id: str | None = None
+) -> dict[str, Any]:
     """Build the outbound message event from a persisted message."""
-    return {
+    payload = {
         "type": "message",
         "data": {
             "id": message.id,
@@ -71,6 +81,9 @@ def message_event(message) -> dict[str, Any]:
             "created_at": message.created_at.isoformat()
         }
     }
+    if client_message_id is not None:
+        payload["data"]["client_message_id"] = client_message_id
+    return payload
 
 
 async def broadcast_presence_event(
@@ -99,15 +112,25 @@ async def handle_message_event(
     websocket: WebSocket
 ) -> bool:
     """Persist and broadcast an incoming message event."""
+    data = payload.get("data")
+    if data is None and "content" in payload:
+        data = payload
+    client_message_id = (
+        data.get("client_message_id")
+        if isinstance(data, dict) and "client_message_id" in data
+        else None
+    )
+
     try:
-        message_payload = normalize_message_payload(
+        message_payload, _ = normalize_message_payload(
             payload=payload,
             conversation_id=conversation_id
         )
     except (ValueError, ValidationError):
         await send_error_event(
             websocket=websocket,
-            message="Invalid message payload"
+            message="Invalid message payload",
+            client_message_id=client_message_id
         )
         return True
 
@@ -121,13 +144,14 @@ async def handle_message_event(
     except HTTPException:
         await send_error_event(
             websocket=websocket,
-            message="You are not authorized to send messages to this conversation"
+            message="You are not authorized to send messages to this conversation",
+            client_message_id=client_message_id
         )
         return True
 
     await connection_manager.broadcast_to_room(
         conversation_id=conversation_id,
-        payload=message_event(message)
+        payload=message_event(message, client_message_id=client_message_id)
     )
     return True
 

@@ -20,8 +20,7 @@ class ConnectionManager:
         user_id: int,
         websocket: WebSocket
     ) -> None:
-        """Accept and register a WebSocket connection for a user."""
-        await websocket.accept()
+        """Register an already-accepted WebSocket connection for a user."""
         self.active_connections.setdefault(user_id, set()).add(websocket)
         self.connection_users[websocket] = user_id
         self.online_users.add(user_id)
