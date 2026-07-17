@@ -10,16 +10,17 @@ export function MessageList() {
   const { messages, selectedConversation, isLoadingMessages } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const activeMessages = selectedConversation 
-    ? messages[selectedConversation.id] || [] 
+  const activeMessages = selectedConversation
+    ? messages[selectedConversation.id] || []
     : []
+  const lastMessageId = activeMessages[activeMessages.length - 1]?.id
 
   useEffect(() => {
-    // Auto-scroll to bottom whenever messages change
-    if (bottomRef.current) {
+    // Auto-scroll to bottom whenever the last message changes
+    if (bottomRef.current && lastMessageId) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" })
     }
-  }, [activeMessages])
+  }, [lastMessageId])
 
   if (isLoadingMessages) {
     return (

@@ -49,20 +49,25 @@ export const authService = {
     const token = response.data.access_token;
     
     // Fetch the user data using the token
-    const userResponse = await api.get<User>("/users/me", {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+    const user = await authService.getCurrentUser(token);
 
     return {
       token,
-      user: userResponse.data
+      user
     };
   },
 
   async register(data: Omit<RegisterFormData, "confirmPassword">): Promise<User> {
     const response = await api.post<User>("/auth/register", data);
+    return response.data;
+  },
+
+  async getCurrentUser(token?: string | null): Promise<User> {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const response = await api.get<User>("/users/me", { headers });
     return response.data;
   },
 

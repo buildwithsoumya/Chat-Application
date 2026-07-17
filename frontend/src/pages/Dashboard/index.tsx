@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useAuthStore } from "@/store/authStore"
 import { useChatStore } from "@/store/chatStore"
 import { Button } from "@/components/ui/button"
@@ -12,16 +13,24 @@ import { LogOut } from "lucide-react"
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore()
-  const { selectedConversation } = useChatStore()
+  const { selectedConversation, selectConversation } = useChatStore()
+  const [showMobileSidebar, setShowMobileSidebar] = useState(true)
 
   const activeName = selectedConversation?.name || 
     selectedConversation?.participants?.[0]?.username || 
     "Unknown"
 
+  const handleSelectConversation = (id: string) => {
+    selectConversation(id)
+    setShowMobileSidebar(false)
+  }
+
   return (
     <div className="flex h-screen bg-bgPrimary text-foreground overflow-hidden">
       {/* Left Sidebar */}
-      <div className="w-80 bg-sidebar border-r border-border flex flex-col hidden md:flex h-full">
+      <div className={`w-80 bg-sidebar border-r border-border flex flex-col h-full md:flex ${
+        showMobileSidebar ? "flex absolute inset-0 z-20 md:relative" : "hidden"
+      }`}>
         {/* User Profile Header */}
         <div className="p-4 flex items-center justify-between border-b border-border/50 h-16 shrink-0">
           <div className="flex items-center gap-3 overflow-hidden">
@@ -46,18 +55,23 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
-        
+
         {/* Conversation List */}
         <div className="flex-1 overflow-hidden">
-          <ConversationList />
+          <ConversationList onSelectConversation={handleSelectConversation} />
         </div>
       </div>
-      
+
       {/* Main Chat Area */}
-      <div className="flex-1 bg-surface flex flex-col relative h-full">
+      <div className={`flex-1 bg-surface flex flex-col relative h-full ${
+        showMobileSidebar ? "hidden md:flex" : "flex"
+      }`}>
         {selectedConversation ? (
           <>
-            <ChatHeader conversation={selectedConversation} />
+            <ChatHeader
+              conversation={selectedConversation}
+              onBack={() => setShowMobileSidebar(true)}
+            />
             <MessageList />
             <MessageComposer />
           </>

@@ -1,32 +1,75 @@
-# React + TypeScript + Vite
+# ChatSphere Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Vite + React + TypeScript chat UI for ChatSphere.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Vite
+- React 19
+- TypeScript
+- React Router
+- Zustand (state management)
+- Axios (REST API)
+- Tailwind CSS
+- shadcn/ui components
 
-## React Compiler
+## Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 18+
+- pnpm, npm, or yarn
+- Running ChatSphere backend (see `../backend`)
 
-## Expanding the Oxlint configuration
+## Environment Variables
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+Copy `.env.example` to `.env` and adjust the values:
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+cp .env.example .env
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:8000` | Backend REST API base URL |
+| `VITE_WS_URL` | derived from `VITE_API_URL` | Backend WebSocket base URL |
+
+## Available Scripts
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Type-check and build for production
+npm run build
+
+# Lint with Oxlint
+npm run lint
+
+# Preview production build
+npm run preview
+```
+
+The dev server runs at `http://localhost:5173` by default.
+
+## Project Structure
+
+```text
+src/
+├── components/       # UI components (chat, sidebar, common, ui)
+├── pages/            # Route-level pages
+├── routes/           # Protected route wrappers
+├── services/         # API and WebSocket service modules
+├── store/            # Zustand stores (auth, chat, toast)
+├── lib/              # Axios instance and utilities
+├── hooks/            # Custom React hooks
+├── types/            # Shared TypeScript types
+└── utils/            # Helper utilities
+```
+
+## Notes
+
+- Messages are sent over WebSocket for real-time delivery; the backend persists and broadcasts them.
+- Authentication uses JWT tokens stored in `localStorage` (HttpOnly cookies are recommended for production hardening).
+- Conversation creation requires selecting at least one participant via the `GET /users/search` endpoint.

@@ -1,4 +1,4 @@
-# ChatSphere 
+# ChatSphere
 
 A production-style real-time chat application built to learn backend engineering, system design concepts, database design, authentication, messaging systems, CI/CD, and cloud deployment.
 
@@ -11,24 +11,23 @@ The project currently supports:
 * User Registration
 * User Authentication (JWT)
 * Protected Routes
-* Conversation Creation
+* User Search by Username
+* Direct and Group Conversation Creation
 * Conversation Membership Management
-* Message Sending
+* Message Sending via WebSocket (real-time)
 * Message History Retrieval
 * Message Editing
 * Message Deletion
 * Pagination
 * Authorization Checks
+* Typing Indicators
+* Online Presence Tracking
 * PostgreSQL Database (Supabase)
 * Alembic Database Migrations
 
 Future phases will include:
 
-* WebSockets
-* Real-Time Messaging
-* Typing Indicators
-* Online Presence Tracking
-* Redis Pub/Sub
+* Redis Pub/Sub for WebSocket scaling
 * Docker
 * GitHub Actions CI/CD
 * AWS Deployment
@@ -46,7 +45,18 @@ Future phases will include:
 * Pydantic
 * JWT Authentication
 * OAuth2 Password Flow
-* Passlib (Password Hashing)
+* bcrypt (Password Hashing)
+
+### Frontend
+
+* Vite
+* React 19
+* TypeScript
+* React Router
+* Zustand
+* Axios
+* Tailwind CSS
+* shadcn/ui components
 
 ### Database
 
@@ -79,7 +89,25 @@ backend/
 ├── alembic/
 ├── requirements.txt
 ├── .env
+├── .env.example
+├── pytest.ini
+├── tests/
 └── alembic.ini
+
+frontend/
+│
+├── src/
+│   ├── components/
+│   ├── pages/
+│   ├── routes/
+│   ├── services/
+│   ├── store/
+│   ├── lib/
+│   └── types/
+├── package.json
+├── .env
+├── .env.example
+└── README.md
 ```
 
 ---
@@ -93,21 +121,32 @@ backend/
 * JWT Access Tokens
 * Password Hashing
 * Protected Endpoints
+* Token Validation on App Reload (`/users/me`)
 
 ### Conversations
 
-* Create Conversation
+* Create Direct and Group Conversations
 * List User Conversations
 * Add Members to Conversations
 * View Conversation Members
+* User Search by Username Prefix
 
 ### Messaging
 
-* Send Messages
+* Send Messages via WebSocket (real-time)
+* Receive Messages in Real Time
 * Retrieve Message History
 * Pagination Support
 * Edit Messages
 * Delete Messages
+* Optimistic Message Updates
+
+### Real-Time
+
+* WebSocket Connection per Conversation
+* Message Broadcasting to Room Members
+* Typing Indicators
+* Online Presence Tracking
 
 ### Security
 
@@ -115,6 +154,7 @@ backend/
 * Authorization Checks
 * Membership Validation
 * Message Ownership Validation
+* Server-Side Input Validation
 
 ---
 
@@ -170,70 +210,86 @@ messages
 
 ```bash
 git clone https://github.com/buildwithsoumya/Chat-Application.git
-cd Chat-Application/backend
+cd Chat-Application
 ```
 
-### Create Virtual Environment
+### Backend Setup
 
 ```bash
+cd backend
+
+# Create virtual environment
 python -m venv venv
-```
 
-### Activate Environment
-
-Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-Linux / macOS:
-
-```bash
+# Activate (Linux/macOS)
 source venv/bin/activate
-```
+# Activate (Windows)
+# venv\Scripts\activate
 
-### Install Dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### Configure Environment Variables
+# Configure environment
+cp .env.example .env
+# Edit .env with your database URL and secret key
 
-Create a `.env` file:
-
-```env
-DATABASE_URL=your_database_url
-SECRET_KEY=your_secret_key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
-
-### Run Migrations
-
-```bash
+# Run migrations
 alembic upgrade head
-```
 
-### Start Server
-
-```bash
+# Start server
 uvicorn app.main:app --reload
 ```
 
-Server:
+Backend runs at `http://127.0.0.1:8000` and Swagger docs at `http://127.0.0.1:8000/docs`.
 
-```text
-http://127.0.0.1:8000
+### Backend Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@localhost:5432/chatsphere` |
+| `SECRET_KEY` | JWT signing secret | `openssl rand -hex 32` |
+| `ALGORITHM` | JWT algorithm | `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime | `30` |
+| `CORS_ORIGINS` | Comma-separated allowed origins | `http://localhost:5173` |
+
+### Backend Tests
+
+```bash
+cd backend
+pytest
 ```
 
-Swagger Docs:
+### Frontend Setup
 
-```text
-http://127.0.0.1:8000/docs
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+# VITE_API_URL defaults to http://localhost:8000
+
+# Start dev server
+npm run dev
 ```
 
+Frontend runs at `http://localhost:5173`.
+
+### Frontend Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend REST API base URL | `http://localhost:8000` |
+| `VITE_WS_URL` | Backend WebSocket base URL | derived from `VITE_API_URL` |
+
+### Frontend Build
+
+```bash
+cd frontend
+npm run build
+```
 
 ---
 
@@ -257,15 +313,15 @@ http://127.0.0.1:8000/docs
 
 ### Phase 4
 
-* WebSockets ⏳
+* WebSockets & Real-Time Messaging ✅
 
 ### Phase 5
 
-* Typing Indicators & Presence ⏳
+* Typing Indicators & Presence ✅
 
 ### Phase 6
 
-* Redis Integration ⏳
+* Redis Integration (WebSocket scaling) ⏳
 
 ### Phase 7
 
@@ -280,3 +336,22 @@ http://127.0.0.1:8000/docs
 * AWS Deployment ⏳
 
 ---
+
+## Known Limitations
+
+* WebSocket state is currently in-memory, so scaling beyond a single process requires Redis Pub/Sub.
+* JWT tokens are stored in `localStorage`. For production, consider HttpOnly `SameSite=Strict` cookies with CSRF protection.
+* WebSocket authentication passes the token in the query string. For production, consider a short-lived ticket exchange or cookie-based auth.
+* No rate limiting is implemented yet.
+
+---
+
+## License
+
+This project is for learning purposes.
+
+---
+
+## Contributing
+
+This is a personal learning project. Feel free to fork and experiment.

@@ -15,7 +15,7 @@ interface AuthState {
   isLoading: boolean
   error: string | null
 
-  initializeAuth: () => void
+  initializeAuth: () => Promise<void>
   login: (data: LoginFormData) => Promise<void>
   register: (data: Omit<RegisterFormData, "confirmPassword">) => Promise<void>
   logout: () => void
@@ -29,15 +29,21 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   error: null,
 
-  initializeAuth: () => {
-    // In a real app, this would verify the token with the backend and fetch the user profile
+  initializeAuth: async () => {
     const token = localStorage.getItem('token');
-    if (token) {
-      // Mock user initialization if we only have token stored without user data locally
-      // For now, we'll rely on login/register to populate the user or assume basic auth state
-      set({ isAuthenticated: true, token });
-    } else {
+    if (!token) {
       set({ isAuthenticated: false, user: null, token: null });
+      return;
+    }
+
+    set({ isLoading: true });
+    try {
+      const user = await authService.getCurrentUser(token);
+      set({ user, token, isAuthenticated: true, isLoading: false });
+    } catch (error: any) {
+      // Token is invalid, expired, or the user no longer exists.
+      localStorage.removeItem('token');
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
     }
   },
 

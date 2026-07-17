@@ -1,15 +1,16 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Settings, Info } from "lucide-react"
+import { Settings, Info, ArrowLeft } from "lucide-react"
 import { type Conversation } from "@/services/conversation"
 import { useChatStore } from "@/store/chatStore"
 import { useAuthStore } from "@/store/authStore"
 
 interface ChatHeaderProps {
   conversation: Conversation;
+  onBack?: () => void;
 }
 
-export function ChatHeader({ conversation }: ChatHeaderProps) {
+export function ChatHeader({ conversation, onBack }: ChatHeaderProps) {
   const { connectionStatus, typingUsers } = useChatStore()
   const { user } = useAuthStore()
 
@@ -29,8 +30,19 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
   }
 
   return (
-    <div className="h-16 shrink-0 border-b border-border flex items-center justify-between px-6 bg-surface/80 backdrop-blur-md z-10 sticky top-0">
+    <div className="h-16 shrink-0 border-b border-border flex items-center justify-between px-4 md:px-6 bg-surface/80 backdrop-blur-md z-10 sticky top-0">
       <div className="flex items-center gap-3">
+        {onBack && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground -ml-2"
+            onClick={onBack}
+          >
+            <ArrowLeft className="h-5 w-5" />
+            <span className="sr-only">Back to conversations</span>
+          </Button>
+        )}
         <Avatar className="h-9 w-9 border border-border">
           <AvatarImage src={conversation.participants[0]?.avatar} />
           <AvatarFallback className="bg-primary/10 text-primary">

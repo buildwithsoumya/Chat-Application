@@ -5,7 +5,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
 
-export function ConversationList() {
+interface ConversationListProps {
+  onSelectConversation?: (id: string) => void;
+}
+
+export function ConversationList({ onSelectConversation }: ConversationListProps) {
   const { 
     conversations, 
     fetchConversations, 
@@ -13,7 +17,7 @@ export function ConversationList() {
     selectedConversation, 
     selectConversation 
   } = useChatStore()
-  
+   
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
 
@@ -36,7 +40,7 @@ export function ConversationList() {
       const participantMatch = conv.participants.some(p => p.username.toLowerCase().includes(query));
       return nameMatch || participantMatch;
     });
-  }, [conversations, searchQuery]);
+  }, [conversations, debouncedQuery]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -70,7 +74,13 @@ export function ConversationList() {
               key={conv.id}
               conversation={conv}
               isSelected={selectedConversation?.id === conv.id}
-              onClick={() => selectConversation(conv.id)}
+              onClick={() => {
+                if (onSelectConversation) {
+                  onSelectConversation(conv.id)
+                } else {
+                  selectConversation(conv.id)
+                }
+              }}
             />
           ))
         ) : (

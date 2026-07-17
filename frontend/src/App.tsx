@@ -15,7 +15,7 @@ export default function App() {
   const { initializeAuth } = useAuthStore()
 
   useEffect(() => {
-    initializeAuth()
+    void initializeAuth()
   }, [initializeAuth])
 
   return (

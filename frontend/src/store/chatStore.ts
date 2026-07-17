@@ -29,13 +29,14 @@ interface ChatState {
   connectionStatus: "connected" | "connecting" | "offline";
   typingUsers: Set<string>;
   onlineUsers: Set<string>;
+  _wsUnsubscribers: Array<() => void>;
 
   fetchConversations: () => Promise<void>;
-  createConversation: (data: { name: string; isGroup: boolean; participant_ids?: string[] }) => Promise<void>;
+  createConversation: (data: { name: string; isGroup: boolean; participantIds: string[] }) => Promise<void>;
   selectConversation: (id: string) => void;
   
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string, currentUserId: string, currentUserName: string) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, currentUserId: string, currentUserName: string) => void;
   setDraft: (conversationId: string, content: string) => void;
   clearMessages: (conversationId: string) => void;
 
@@ -58,6 +59,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   connectionStatus: "offline",
   typingUsers: new Set(),
   onlineUsers: new Set(),
+  _wsUnsubscribers: [],
 
   fetchConversations: async () => {
     set({ isLoading: true, error: null });
@@ -76,7 +78,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   createConversation: async (data) => {
     set({ isLoading: true, error: null });
     try {
-      const newConversation = await conversationService.createConversation(data);
+      const newConversation = await conversationService.createConversation({
+        name: data.name,
+        isGroup: data.isGroup,
+        participantIds: data.participantIds,
+      });
       const currentConversations = get().conversations;
       
       set({ 
@@ -136,7 +142,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId, content, currentUserId, currentUserName) => {
+  sendMessage: (conversationId, content, currentUserId, currentUserName) => {
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage: Message = {
       id: tempId,
@@ -163,39 +169,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       };
     });
-    
-    try {
-      const apiMessage = await messageService.sendMessage(conversationId, content);
-      
-      // Replace optimistic message with actual data from backend
-      set((state) => {
-        const msgs = state.messages[conversationId] || [];
-        const updated = msgs.map(m => m.id === tempId ? {
-          ...m,
-          id: String(apiMessage.id),
-          timestamp: apiMessage.created_at,
-          status: "sent" as const
-        } : m);
-        
-        return { 
-          sendingMessage: false,
-          messages: { ...state.messages, [conversationId]: updated } 
-        };
-      });
-    } catch (error: any) {
-      toast.error("Failed to send message", "Please try again.");
-      
-      // Remove optimistic message on failure
+
+    // Send over WebSocket; the server will broadcast the persisted message
+    // back to all room members, including this sender, replacing the optimistic one.
+    const sent = wsService.send("message", {
+      content,
+      client_message_id: tempId
+    });
+
+    if (!sent) {
+      toast.error("Failed to send message", "Not connected. Please try again.");
+
+      // Rollback optimistic message and restore draft
       set((state) => {
         const msgs = state.messages[conversationId] || [];
         const filtered = msgs.filter(m => m.id !== tempId);
-        
+
         return { 
           sendingMessage: false,
           messages: { ...state.messages, [conversationId]: filtered },
           draftMessages: {
             ...state.draftMessages,
-            [conversationId]: content // restore draft
+            [conversationId]: content
           }
         };
       });
@@ -219,71 +214,121 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   connectWebSocket: (conversationId: string, token: string) => {
-    // Clean up previous listeners if any
+    // Clean up previous listeners and connection before registering new ones.
     get().disconnectWebSocket();
 
-    wsService.on("status", (status: any) => {
-      set({ connectionStatus: status });
-    });
+    const unsubs: Array<() => void> = [];
 
-    wsService.on("message", (apiMessage: any) => {
-      const msg: Message = {
-        id: String(apiMessage.id),
-        conversationId: String(apiMessage.conversation_id),
-        content: apiMessage.content,
-        senderId: String(apiMessage.sender_id),
-        senderName: "User", // Will be mapped in UI
-        timestamp: apiMessage.created_at,
-        status: "sent"
-      };
+    unsubs.push(
+      wsService.on("status", (status: any) => {
+        set({ connectionStatus: status });
+      })
+    );
 
-      set((state) => {
-        const currentMessages = state.messages[conversationId] || [];
-        // Prevent duplicate messages if optimistic update already added it
-        if (currentMessages.some(m => m.id === msg.id)) {
-          return state;
-        }
-        return {
-          messages: {
-            ...state.messages,
-            [conversationId]: [...currentMessages, msg]
-          }
+    unsubs.push(
+      wsService.on("message", (apiMessage: any) => {
+        const clientMessageId = apiMessage.client_message_id;
+        const realMessage: Message = {
+          id: String(apiMessage.id),
+          conversationId: String(apiMessage.conversation_id),
+          content: apiMessage.content,
+          senderId: String(apiMessage.sender_id),
+          senderName: "User", // Will be mapped in UI
+          timestamp: apiMessage.created_at,
+          status: "sent"
         };
-      });
-    });
 
-    wsService.on("typing_start", (data: any) => {
-      set((state) => {
-        const newSet = new Set(state.typingUsers);
-        newSet.add(String(data.user_id));
-        return { typingUsers: newSet };
-      });
-    });
+        set((state) => {
+          const currentMessages = state.messages[conversationId] || [];
 
-    wsService.on("typing_stop", (data: any) => {
-      set((state) => {
-        const newSet = new Set(state.typingUsers);
-        newSet.delete(String(data.user_id));
-        return { typingUsers: newSet };
-      });
-    });
+          // If this is a broadcast of our own optimistic message, replace it.
+          if (clientMessageId && currentMessages.some(m => m.id === clientMessageId)) {
+            const updated = currentMessages.map(m =>
+              m.id === clientMessageId ? { ...realMessage, status: "sent" as const } : m
+            );
+            return {
+              sendingMessage: false,
+              messages: { ...state.messages, [conversationId]: updated }
+            };
+          }
 
-    wsService.on("presence", (data: any) => {
-      set((state) => {
-        const newSet = new Set(state.onlineUsers);
-        if (data.status === "online") {
+          // Otherwise, add the message if it is not already present.
+          if (currentMessages.some(m => m.id === realMessage.id)) {
+            return state;
+          }
+          return {
+            messages: {
+              ...state.messages,
+              [conversationId]: [...currentMessages, realMessage]
+            }
+          };
+        });
+      })
+    );
+
+    unsubs.push(
+      wsService.on("typing_start", (data: any) => {
+        set((state) => {
+          const newSet = new Set(state.typingUsers);
           newSet.add(String(data.user_id));
-        } else {
-          newSet.delete(String(data.user_id));
-        }
-        return { onlineUsers: newSet };
-      });
-    });
+          return { typingUsers: newSet };
+        });
+      })
+    );
 
+    unsubs.push(
+      wsService.on("typing_stop", (data: any) => {
+        set((state) => {
+          const newSet = new Set(state.typingUsers);
+          newSet.delete(String(data.user_id));
+          return { typingUsers: newSet };
+        });
+      })
+    );
+
+    unsubs.push(
+      wsService.on("presence", (data: any) => {
+        set((state) => {
+          const newSet = new Set(state.onlineUsers);
+          if (data.status === "online") {
+            newSet.add(String(data.user_id));
+          } else {
+            newSet.delete(String(data.user_id));
+          }
+          return { onlineUsers: newSet };
+        });
+      })
+    );
+
+    unsubs.push(
+      wsService.on("error", (data: any) => {
+        const clientMessageId = data?.client_message_id;
+        if (clientMessageId) {
+          set((state) => {
+            const currentMessages = state.messages[conversationId] || [];
+            const filtered = currentMessages.filter(m => m.id !== clientMessageId);
+            if (filtered.length === currentMessages.length) {
+              return state;
+            }
+            return {
+              sendingMessage: false,
+              messages: { ...state.messages, [conversationId]: filtered }
+            };
+          });
+        }
+        toast.error("Chat error", data?.message || "Something went wrong");
+      })
+    );
+
+    set({ _wsUnsubscribers: unsubs });
     wsService.connect(conversationId, token);
   },
 
   disconnectWebSocket: () => {
+    // Unsubscribe all listeners first so the disconnect callback does not
+    // trigger duplicate state updates or leaked handlers.
+    get()._wsUnsubscribers.forEach((unsub) => unsub());
+    set({ _wsUnsubscribers: [] });
     wsService.disconnect();
     set({ connectionStatus: "offline", typingUsers: new Set() });
   },

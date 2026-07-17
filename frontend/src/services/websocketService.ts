@@ -23,7 +23,9 @@ class WebSocketService {
     // Dispatch a status event indicating connecting
     this.emit("status", "connecting");
 
-    const wsUrl = `ws://localhost:8000/ws/${conversationId}?token=${token}`;
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const WS_BASE_URL = import.meta.env.VITE_WS_URL || API_URL.replace(/^http/, "ws");
+    const wsUrl = `${WS_BASE_URL}/ws/${conversationId}?token=${token}`;
     this.socket = new WebSocket(wsUrl);
 
     this.socket.onopen = () => {
@@ -77,12 +79,12 @@ class WebSocketService {
     this.emit("status", "offline");
   }
 
-  send(type: string, data: any = {}) {
+  send(type: string, data: any = {}): boolean {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({ type, data }));
+      return true;
     }
-    // We intentionally don't throw a warning here to avoid console spam
-    // when users type before the connection is fully established.
+    return false;
   }
 
   on(event: string, callback: EventHandler) {
