@@ -22,7 +22,7 @@ const schema = z
   .object({
     name: z.string().optional(),
     isGroup: z.boolean(),
-    participantIds: z.array(z.string()).default([]),
+    participantIds: z.array(z.string()),
   })
   .refine(
     (data) => !data.isGroup || (data.name && data.name.trim().length > 0),
@@ -79,7 +79,7 @@ export function CreateConversationModal() {
       try {
         const results = await userService.searchUsers(searchQuery.trim(), 10)
         setSearchResults(results)
-      } catch (_error) {
+      } catch {
         // Search failures are non-fatal; just clear results.
         setSearchResults([])
       } finally {
@@ -126,7 +126,7 @@ export function CreateConversationModal() {
       setSearchQuery("")
       setSearchResults([])
       setSelectedParticipants([])
-    } catch (_error) {
+    } catch {
       toast.error("Failed to create conversation")
     }
   }

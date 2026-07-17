@@ -136,7 +136,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: { ...state.messages, [conversationId]: mappedMessages },
         isLoadingMessages: false
       }));
-    } catch (error: any) {
+    } catch {
       toast.error("Network Error", "Could not fetch message history.");
       set({ isLoadingMessages: false });
     }
@@ -208,7 +208,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearMessages: (conversationId) => {
     set((state) => {
-      const { [conversationId]: removed, ...rest } = state.messages;
+      const { [conversationId]: _removed, ...rest } = state.messages;
       return { messages: rest };
     });
   },

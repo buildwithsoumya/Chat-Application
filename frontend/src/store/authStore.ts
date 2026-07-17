@@ -40,7 +40,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await authService.getCurrentUser(token);
       set({ user, token, isAuthenticated: true, isLoading: false });
-    } catch (error: any) {
+    } catch {
       // Token is invalid, expired, or the user no longer exists.
       localStorage.removeItem('token');
       set({ user: null, token: null, isAuthenticated: false, isLoading: false });
