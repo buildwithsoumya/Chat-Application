@@ -8,6 +8,7 @@ from sqlalchemy import String
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
+from app.core.utils import utc_now
 from app.database.base import Base
 
 
@@ -24,13 +25,15 @@ class Conversation(Base):
     )
     is_group: Mapped[bool] = mapped_column(
         Boolean,
-        default=False
+        default=False,
+        nullable=False
     )
     created_by: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=utc_now,
+        nullable=False
     )

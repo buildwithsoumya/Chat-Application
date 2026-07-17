@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from fastapi import HTTPException
 from fastapi import status
 from sqlalchemy.orm import Session
 
+from app.core.utils import utc_now
 from app.models.conversation import Conversation
 from app.models.conversation_member import ConversationMember
 from app.models.message import Message
@@ -24,7 +23,7 @@ def is_conversation_member(
     db: Session,
     conversation_id: int,
     user_id: int
-):
+) -> bool:
     return (
         db.query(ConversationMember)
         .filter(
@@ -50,11 +49,8 @@ def get_message_by_id(
 def ensure_conversation_exists(
     db: Session,
     conversation_id: int
-):
-    conversation = get_conversation_by_id(
-        db,
-        conversation_id
-    )
+) -> Conversation:
+    conversation = get_conversation_by_id(db, conversation_id)
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -67,16 +63,10 @@ def ensure_conversation_member(
     db: Session,
     conversation_id: int,
     user_id: int
-):
-    ensure_conversation_exists(
-        db,
-        conversation_id
-    )
-    if not is_conversation_member(
-        db,
-        conversation_id,
-        user_id
-    ):
+) -> None:
+    """Verify conversation exists and user is a member. Raises 404 or 403."""
+    ensure_conversation_exists(db, conversation_id)
+    if not is_conversation_member(db, conversation_id, user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not a member of this conversation"
@@ -86,7 +76,7 @@ def ensure_conversation_member(
 def ensure_message_owner(
     message: Message,
     user_id: int
-):
+) -> None:
     if message.sender_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -99,12 +89,9 @@ def send_message(
     conversation_id: int,
     sender_id: int,
     content: str
-):
-    ensure_conversation_member(
-        db,
-        conversation_id,
-        sender_id
-    )
+) -> Message:
+    """Validate membership, persist message, commit, and return it."""
+    ensure_conversation_member(db, conversation_id, sender_id)
     message = Message(
         conversation_id=conversation_id,
         sender_id=sender_id,
@@ -122,12 +109,8 @@ def get_conversation_messages(
     user_id: int,
     page: int,
     limit: int
-):
-    ensure_conversation_member(
-        db,
-        conversation_id,
-        user_id
-    )
+) -> list[Message]:
+    ensure_conversation_member(db, conversation_id, user_id)
     offset = (page - 1) * limit
     return (
         db.query(Message)
@@ -144,22 +127,17 @@ def edit_message(
     message_id: int,
     user_id: int,
     content: str
-):
-    message = get_message_by_id(
-        db,
-        message_id
-    )
+) -> Message:
+    message = get_message_by_id(db, message_id)
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Message not found"
         )
-    ensure_message_owner(
-        message,
-        user_id
-    )
+    ensure_conversation_member(db, message.conversation_id, user_id)
+    ensure_message_owner(message, user_id)
     message.content = content
-    message.updated_at = datetime.utcnow()
+    message.updated_at = utc_now()
     db.commit()
     db.refresh(message)
     return message
@@ -169,19 +147,14 @@ def delete_message(
     db: Session,
     message_id: int,
     user_id: int
-):
-    message = get_message_by_id(
-        db,
-        message_id
-    )
+) -> None:
+    message = get_message_by_id(db, message_id)
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Message not found"
         )
-    ensure_message_owner(
-        message,
-        user_id
-    )
+    ensure_conversation_member(db, message.conversation_id, user_id)
+    ensure_message_owner(message, user_id)
     db.delete(message)
     db.commit()
