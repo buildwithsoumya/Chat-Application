@@ -1,5 +1,6 @@
 from sqlalchemy import Integer
 from sqlalchemy import String
+from sqlalchemy import Text
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from app.database.base import Base
@@ -23,4 +24,12 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(
         String(255),
         nullable=False
+    )
+    avatar: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+    bio: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True
     )

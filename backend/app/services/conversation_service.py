@@ -4,6 +4,7 @@ from sqlalchemy import case
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.utils import utc_now
 from app.models.conversation import Conversation
 from app.models.conversation_member import ConversationMember
 from app.models.message import Message
@@ -15,7 +16,7 @@ def serialize_participant(user: User) -> dict:
     return {
         "id": str(user.id),
         "username": user.username,
-        "avatar": None
+        "avatar": user.avatar
     }
 
 
@@ -107,13 +108,35 @@ def build_conversation_response(
         else None
     )
 
+    # Count unread messages: messages from others after the user's last_read_at
+    member_record = (
+        db.query(ConversationMember)
+        .filter(
+            ConversationMember.conversation_id == conversation.id,
+            ConversationMember.user_id == current_user_id
+        )
+        .first()
+    )
+    if member_record is not None:
+        unread_count = (
+            db.query(func.count(Message.id))
+            .filter(
+                Message.conversation_id == conversation.id,
+                Message.sender_id != current_user_id,
+                Message.created_at > member_record.last_read_at
+            )
+            .scalar() or 0
+        )
+    else:
+        unread_count = 0
+
     return {
         "id": str(conversation.id),
         "name": conversation.name,
         "is_group": conversation.is_group,
         "participants": participants,
         "lastMessageAt": last_message_at,
-        "unreadCount": 0
+        "unreadCount": unread_count
     }
 
 
@@ -138,6 +161,25 @@ def get_user_conversations(db: Session, user_id: int):
         )
 
     return result
+
+
+def mark_conversation_as_read(
+    db: Session,
+    conversation_id: int,
+    user_id: int
+) -> None:
+    """Update the user's last_read_at for a conversation to now."""
+    member = (
+        db.query(ConversationMember)
+        .filter(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.user_id == user_id
+        )
+        .first()
+    )
+    if member is not None:
+        member.last_read_at = utc_now()
+        db.commit()
 
 
 def create_new_conversation(

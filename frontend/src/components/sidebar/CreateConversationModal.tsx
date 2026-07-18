@@ -134,26 +134,26 @@ export function CreateConversationModal() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-white/[0.05] rounded-lg">
           <Plus className="h-5 w-5" />
           <span className="sr-only">New Conversation</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[480px] glass-strong border-border/50">
         <DialogHeader>
-          <DialogTitle>New Conversation</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl">New Conversation</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
             Start a direct chat or create a group conversation.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
           {/* Type toggle */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 p-1 glass rounded-xl">
             <Button
               type="button"
-              variant={!isGroup ? "default" : "outline"}
+              variant={!isGroup ? "default" : "ghost"}
               size="sm"
-              className="flex-1 gap-2"
+              className={`flex-1 gap-2 rounded-lg transition-all ${!isGroup ? "glow-sm" : "text-muted-foreground"}`}
               onClick={() => {
                 setValue("isGroup", false)
                 if (selectedParticipants.length > 1) {
@@ -166,9 +166,9 @@ export function CreateConversationModal() {
             </Button>
             <Button
               type="button"
-              variant={isGroup ? "default" : "outline"}
+              variant={isGroup ? "default" : "ghost"}
               size="sm"
-              className="flex-1 gap-2"
+              className={`flex-1 gap-2 rounded-lg transition-all ${isGroup ? "glow-sm" : "text-muted-foreground"}`}
               onClick={() => setValue("isGroup", true)}
             >
               <Users className="h-4 w-4" />
@@ -200,7 +200,7 @@ export function CreateConversationModal() {
               <Input
                 type="search"
                 placeholder="Search by username..."
-                className="pl-9"
+                className="pl-9 bg-white/[0.03] border-border/40 focus-visible:border-blue-500/40"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 disabled={isSubmitting}
@@ -210,7 +210,7 @@ export function CreateConversationModal() {
             {isSearching && <p className="text-sm text-muted-foreground">Searching...</p>}
 
             {!isSearching && searchResults.length > 0 && (
-              <div className="border rounded-md max-h-32 overflow-y-auto">
+              <div className="glass rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
                 {searchResults
                   .filter((user) => !participantIds.includes(user.id))
                   .map((user) => (
@@ -218,9 +218,14 @@ export function CreateConversationModal() {
                       key={user.id}
                       type="button"
                       onClick={() => addParticipant(user)}
-                      className="w-full text-left px-3 py-2 hover:bg-muted text-sm flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 hover:bg-white/[0.05] text-sm flex items-center justify-between transition-colors first:rounded-t-lg last:rounded-b-lg"
                     >
-                      <span>{user.username}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="h-6 w-6 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-primary text-[10px] font-semibold flex items-center justify-center">
+                          {user.username.charAt(0).toUpperCase()}
+                        </span>
+                        {user.username}
+                      </span>
                       <Plus className="h-4 w-4 text-muted-foreground" />
                     </button>
                   ))}
@@ -240,12 +245,12 @@ export function CreateConversationModal() {
           {selectedParticipants.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {selectedParticipants.map((user) => (
-                <Badge key={user.id} variant="secondary" className="gap-1 pr-1">
+                <Badge key={user.id} variant="secondary" className="gap-1 pr-1 bg-blue-500/10 text-primary border border-blue-500/20">
                   {user.username}
                   <button
                     type="button"
                     onClick={() => removeParticipant(user.id)}
-                    className="rounded-full hover:bg-muted p-0.5"
+                    className="rounded-full hover:bg-blue-500/20 p-0.5 transition-colors"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -255,10 +260,10 @@ export function CreateConversationModal() {
           )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isSubmitting} className="text-muted-foreground">
               Cancel
             </Button>
-            <Button type="submit" isLoading={isSubmitting}>
+            <Button type="submit" isLoading={isSubmitting} className="glow-sm">
               Create
             </Button>
           </div>

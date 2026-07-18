@@ -88,14 +88,16 @@ def send_message(
     db: Session,
     conversation_id: int,
     sender_id: int,
-    content: str
+    content: str,
+    attachment: str | None = None
 ) -> Message:
     """Validate membership, persist message, commit, and return it."""
     ensure_conversation_member(db, conversation_id, sender_id)
     message = Message(
         conversation_id=conversation_id,
         sender_id=sender_id,
-        content=content
+        content=content,
+        attachment=attachment
     )
     db.add(message)
     db.commit()

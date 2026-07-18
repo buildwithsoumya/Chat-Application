@@ -5,6 +5,7 @@ export interface ApiMessage {
   conversation_id: string | number;
   sender_id: string | number;
   content: string;
+  attachment?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -17,10 +18,11 @@ export const messageService = {
     return response.data;
   },
 
-  async sendMessage(conversationId: string | number, content: string): Promise<ApiMessage> {
+  async sendMessage(conversationId: string | number, content: string, attachment?: string | null): Promise<ApiMessage> {
     const response = await api.post<ApiMessage>("/messages", {
       conversation_id: conversationId,
       content,
+      attachment: attachment || undefined,
     });
     return response.data;
   },

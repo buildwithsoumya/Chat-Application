@@ -51,9 +51,10 @@ def normalize_message_payload(
     if not isinstance(data, dict):
         raise ValueError("Message event data must be an object")
 
-    content = data.get("content")
-    if content is None:
-        raise ValueError("Message content is required")
+    content = data.get("content", "")
+    attachment = data.get("attachment")
+    if not content and not attachment:
+        raise ValueError("Message must have either content or an attachment")
 
     client_message_id = data.get("client_message_id")
     if client_message_id is not None and not isinstance(client_message_id, str):
@@ -61,7 +62,8 @@ def normalize_message_payload(
 
     message_create = MessageCreate(
         conversation_id=conversation_id,
-        content=content
+        content=content,
+        attachment=attachment
     )
     return message_create, client_message_id
 
@@ -78,7 +80,8 @@ def message_event(
             "conversation_id": message.conversation_id,
             "sender_id": message.sender_id,
             "content": message.content,
-            "created_at": message.created_at.isoformat()
+            "attachment": message.attachment,
+            "created_at": message.created_at.isoformat() + ("Z" if message.created_at.tzinfo is None else "")
         }
     }
     if client_message_id is not None:
@@ -139,7 +142,8 @@ async def handle_message_event(
             db=db,
             conversation_id=message_payload.conversation_id,
             sender_id=user_id,
-            content=message_payload.content
+            content=message_payload.content,
+            attachment=message_payload.attachment
         )
     except HTTPException:
         await send_error_event(

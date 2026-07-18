@@ -8,8 +8,9 @@ export interface Message {
   id: string;
   conversationId: string;
   content: string;
+  attachment?: string | null;
   senderId: string;
-  senderName: string; // The backend ApiMessage currently doesn't provide this directly, we'll try to resolve it via participant matching in UI
+  senderName: string;
   senderAvatar?: string;
   timestamp: string;
   status: "sending" | "sent" | "delivered" | "read";
@@ -18,14 +19,13 @@ export interface Message {
 interface ChatState {
   conversations: Conversation[];
   selectedConversation: Conversation | null;
-  messages: Record<string, Message[]>; // Keyed by conversationId
-  draftMessages: Record<string, string>; // Keyed by conversationId
+  messages: Record<string, Message[]>;
+  draftMessages: Record<string, string>;
   isLoading: boolean;
   isLoadingMessages: boolean;
   sendingMessage: boolean;
   error: string | null;
 
-  // Phase F6: WebSockets
   connectionStatus: "connected" | "connecting" | "offline";
   typingUsers: Set<string>;
   onlineUsers: Set<string>;
@@ -34,13 +34,13 @@ interface ChatState {
   fetchConversations: () => Promise<void>;
   createConversation: (data: { name: string; isGroup: boolean; participantIds: string[] }) => Promise<void>;
   selectConversation: (id: string) => void;
-  
+  markAsRead: (conversationId: string) => Promise<void>;
+
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string, currentUserId: string, currentUserName: string) => void;
+  sendMessage: (conversationId: string, content: string, currentUserId: string, currentUserName: string, attachment?: string | null) => void;
   setDraft: (conversationId: string, content: string) => void;
   clearMessages: (conversationId: string) => void;
 
-  // WS Actions
   connectWebSocket: (conversationId: string, token: string) => void;
   disconnectWebSocket: () => void;
   sendTypingIndicator: (isTyping: boolean) => void;
@@ -55,7 +55,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoadingMessages: false,
   sendingMessage: false,
   error: null,
-  
+
   connectionStatus: "offline",
   typingUsers: new Set(),
   onlineUsers: new Set(),
@@ -68,9 +68,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ conversations, isLoading: false });
     } catch (error: any) {
       toast.error("Failed to load conversations", error.response?.data?.detail || error.message);
-      set({ 
-        error: error.response?.data?.detail || "Failed to load conversations", 
-        isLoading: false 
+      set({
+        error: error.response?.data?.detail || "Failed to load conversations",
+        isLoading: false
       });
     }
   },
@@ -84,17 +84,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         participantIds: data.participantIds,
       });
       const currentConversations = get().conversations;
-      
-      set({ 
+
+      set({
         conversations: [newConversation, ...currentConversations],
-        selectedConversation: newConversation,
-        isLoading: false 
+        isLoading: false
       });
+
+      get().selectConversation(newConversation.id);
     } catch (error: any) {
       toast.error("Failed to create conversation", error.response?.data?.detail || error.message);
-      set({ 
-        error: error.response?.data?.detail || "Failed to create conversation", 
-        isLoading: false 
+      set({
+        error: error.response?.data?.detail || "Failed to create conversation",
+        isLoading: false
       });
       throw error;
     }
@@ -105,11 +106,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (conversation) {
       set({ selectedConversation: conversation });
       get().fetchMessages(id);
-      
+
       const token = localStorage.getItem("token");
       if (token) {
         get().connectWebSocket(id, token);
       }
+
+      get().markAsRead(id);
+    }
+  },
+
+  markAsRead: async (conversationId: string) => {
+    try {
+      await conversationService.markAsRead(conversationId);
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          String(c.id) === String(conversationId)
+            ? { ...c, unreadCount: 0 }
+            : c
+        ),
+        selectedConversation:
+          state.selectedConversation && String(state.selectedConversation.id) === String(conversationId)
+            ? { ...state.selectedConversation, unreadCount: 0 }
+            : state.selectedConversation
+      }));
+    } catch {
+      // Non-fatal: unread count will refresh on next fetch
     }
   },
 
@@ -117,19 +139,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoadingMessages: true });
     try {
       const apiMessages = await messageService.fetchMessages(conversationId);
-      
-      // Map API messages to our frontend Message interface
+
       const mappedMessages: Message[] = apiMessages.map(msg => ({
         id: String(msg.id),
         conversationId: String(msg.conversation_id),
         content: msg.content,
+        attachment: msg.attachment || null,
         senderId: String(msg.sender_id),
-        senderName: "User", // Fallback, will be resolved in component
+        senderName: "User",
         timestamp: msg.created_at,
         status: "sent"
       }));
 
-      // Ensure chronological order
       mappedMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       set((state) => ({
@@ -142,19 +163,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: (conversationId, content, currentUserId, currentUserName) => {
+  sendMessage: (conversationId, content, currentUserId, currentUserName, attachment) => {
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage: Message = {
       id: tempId,
       conversationId,
       content,
+      attachment: attachment || null,
       senderId: currentUserId,
       senderName: currentUserName,
       timestamp: new Date().toISOString(),
       status: "sending",
     };
 
-    // Optimistic Update & Clear Draft
     set((state) => {
       const currentMessages = state.messages[conversationId] || [];
       return {
@@ -165,35 +186,60 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         draftMessages: {
           ...state.draftMessages,
-          [conversationId]: "" 
+          [conversationId]: ""
         }
       };
     });
 
-    // Send over WebSocket; the server will broadcast the persisted message
-    // back to all room members, including this sender, replacing the optimistic one.
     const sent = wsService.send("message", {
       content,
+      attachment: attachment || undefined,
       client_message_id: tempId
     });
 
     if (!sent) {
-      toast.error("Failed to send message", "Not connected. Please try again.");
+      // WebSocket not connected — fall back to REST API so messages
+      // are persisted even when the recipient is offline.
+      messageService
+        .sendMessage(conversationId, content, attachment)
+        .then((apiMessage) => {
+          const realMessage: Message = {
+            id: String(apiMessage.id),
+            conversationId: String(apiMessage.conversation_id),
+            content: apiMessage.content,
+            attachment: apiMessage.attachment || null,
+            senderId: String(apiMessage.sender_id),
+            senderName: currentUserName,
+            timestamp: apiMessage.created_at,
+            status: "sent",
+          };
 
-      // Rollback optimistic message and restore draft
-      set((state) => {
-        const msgs = state.messages[conversationId] || [];
-        const filtered = msgs.filter(m => m.id !== tempId);
-
-        return { 
-          sendingMessage: false,
-          messages: { ...state.messages, [conversationId]: filtered },
-          draftMessages: {
-            ...state.draftMessages,
-            [conversationId]: content
-          }
-        };
-      });
+          set((state) => {
+            const currentMessages = state.messages[conversationId] || [];
+            const updated = currentMessages.map(m =>
+              m.id === tempId ? realMessage : m
+            );
+            return {
+              sendingMessage: false,
+              messages: { ...state.messages, [conversationId]: updated }
+            };
+          });
+        })
+        .catch(() => {
+          toast.error("Failed to send message", "Could not deliver message. Please try again.");
+          set((state) => {
+            const msgs = state.messages[conversationId] || [];
+            const filtered = msgs.filter(m => m.id !== tempId);
+            return {
+              sendingMessage: false,
+              messages: { ...state.messages, [conversationId]: filtered },
+              draftMessages: {
+                ...state.draftMessages,
+                [conversationId]: content
+              }
+            };
+          });
+        });
     }
   },
 
@@ -214,7 +260,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   connectWebSocket: (conversationId: string, token: string) => {
-    // Clean up previous listeners and connection before registering new ones.
     get().disconnectWebSocket();
 
     const unsubs: Array<() => void> = [];
@@ -232,8 +277,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           id: String(apiMessage.id),
           conversationId: String(apiMessage.conversation_id),
           content: apiMessage.content,
+          attachment: apiMessage.attachment || null,
           senderId: String(apiMessage.sender_id),
-          senderName: "User", // Will be mapped in UI
+          senderName: "User",
           timestamp: apiMessage.created_at,
           status: "sent"
         };
@@ -241,7 +287,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => {
           const currentMessages = state.messages[conversationId] || [];
 
-          // If this is a broadcast of our own optimistic message, replace it.
           if (clientMessageId && currentMessages.some(m => m.id === clientMessageId)) {
             const updated = currentMessages.map(m =>
               m.id === clientMessageId ? { ...realMessage, status: "sent" as const } : m
@@ -252,10 +297,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
             };
           }
 
-          // Otherwise, add the message if it is not already present.
           if (currentMessages.some(m => m.id === realMessage.id)) {
             return state;
           }
+
+          // New message from another user — mark conversation as read
+          // since we're actively viewing it.
+          if (String(apiMessage.sender_id) !== String(realMessage.senderId)) {
+            get().markAsRead(conversationId);
+          }
+
           return {
             messages: {
               ...state.messages,
@@ -325,8 +376,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   disconnectWebSocket: () => {
-    // Unsubscribe all listeners first so the disconnect callback does not
-    // trigger duplicate state updates or leaked handlers.
     get()._wsUnsubscribers.forEach((unsub) => unsub());
     set({ _wsUnsubscribers: [] });
     wsService.disconnect();
