@@ -19,7 +19,7 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> User:
-    """Return the current REST API user from a bearer token."""
+    """Return the current authenticated REST user."""
     return get_user_from_token(
         token=token,
         db=db

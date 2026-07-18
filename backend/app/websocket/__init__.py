@@ -1,1 +1,1 @@
-"""WebSocket utilities and routes for ChatSphere."""
+"""WebSocket support for ChatSphere."""

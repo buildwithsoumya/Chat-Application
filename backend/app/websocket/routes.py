@@ -25,33 +25,82 @@ router = APIRouter(
 
 async def send_error_event(
     websocket: WebSocket,
-    message: str
+    message: str,
+    client_message_id: str | None = None
 ) -> None:
-    """Send a structured WebSocket error event to a client."""
-    await websocket.send_json(
-        {
-            "type": "error",
-            "data": {
-                "message": message
-            }
+    """Send a structured WebSocket error event."""
+    payload = {
+        "type": "error",
+        "data": {
+            "message": message
         }
-    )
+    }
+    if client_message_id is not None:
+        payload["data"]["client_message_id"] = client_message_id
+    await websocket.send_json(payload)
 
 
 def normalize_message_payload(
     payload: dict[str, Any],
     conversation_id: int
-) -> MessageCreate:
-    """Validate an incoming message event and return message data."""
+) -> tuple[MessageCreate, str | None]:
+    """Validate a message event and return persistence-ready data plus client id."""
     data = payload.get("data")
     if data is None and "content" in payload:
         data = payload
     if not isinstance(data, dict):
         raise ValueError("Message event data must be an object")
 
-    return MessageCreate(
+    content = data.get("content")
+    if content is None:
+        raise ValueError("Message content is required")
+
+    client_message_id = data.get("client_message_id")
+    if client_message_id is not None and not isinstance(client_message_id, str):
+        raise ValueError("client_message_id must be a string")
+
+    message_create = MessageCreate(
         conversation_id=conversation_id,
-        content=data.get("content")
+        content=content
+    )
+    return message_create, client_message_id
+
+
+def message_event(
+    message,
+    client_message_id: str | None = None
+) -> dict[str, Any]:
+    """Build the outbound message event from a persisted message."""
+    payload = {
+        "type": "message",
+        "data": {
+            "id": message.id,
+            "conversation_id": message.conversation_id,
+            "sender_id": message.sender_id,
+            "content": message.content,
+            "created_at": message.created_at.isoformat()
+        }
+    }
+    if client_message_id is not None:
+        payload["data"]["client_message_id"] = client_message_id
+    return payload
+
+
+async def broadcast_presence_event(
+    conversation_id: int,
+    user_id: int,
+    status_value: str
+) -> None:
+    """Broadcast a presence status update to a room."""
+    await connection_manager.broadcast_to_room(
+        conversation_id=conversation_id,
+        payload={
+            "type": "presence",
+            "data": {
+                "user_id": user_id,
+                "status": status_value
+            }
+        }
     )
 
 
@@ -62,16 +111,26 @@ async def handle_message_event(
     db: Session,
     websocket: WebSocket
 ) -> bool:
-    """Persist a message event and broadcast the saved message."""
+    """Persist and broadcast an incoming message event."""
+    data = payload.get("data")
+    if data is None and "content" in payload:
+        data = payload
+    client_message_id = (
+        data.get("client_message_id")
+        if isinstance(data, dict) and "client_message_id" in data
+        else None
+    )
+
     try:
-        message_payload = normalize_message_payload(
+        message_payload, _ = normalize_message_payload(
             payload=payload,
             conversation_id=conversation_id
         )
     except (ValueError, ValidationError):
         await send_error_event(
             websocket=websocket,
-            message="Invalid message payload"
+            message="Invalid message payload",
+            client_message_id=client_message_id
         )
         return True
 
@@ -83,21 +142,16 @@ async def handle_message_event(
             content=message_payload.content
         )
     except HTTPException:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return False
+        await send_error_event(
+            websocket=websocket,
+            message="You are not authorized to send messages to this conversation",
+            client_message_id=client_message_id
+        )
+        return True
 
     await connection_manager.broadcast_to_room(
         conversation_id=conversation_id,
-        payload={
-            "type": "message",
-            "data": {
-                "id": message.id,
-                "conversation_id": message.conversation_id,
-                "sender_id": message.sender_id,
-                "content": message.content,
-                "created_at": message.created_at.isoformat()
-            }
-        }
+        payload=message_event(message, client_message_id=client_message_id)
     )
     return True
 
@@ -107,7 +161,7 @@ async def handle_typing_event(
     conversation_id: int,
     user_id: int
 ) -> None:
-    """Broadcast a transient typing event to a conversation room."""
+    """Broadcast a transient typing event to a room."""
     await connection_manager.broadcast_to_room(
         conversation_id=conversation_id,
         payload={
@@ -115,24 +169,6 @@ async def handle_typing_event(
             "data": {
                 "conversation_id": conversation_id,
                 "user_id": user_id
-            }
-        }
-    )
-
-
-async def broadcast_presence_event(
-    conversation_id: int,
-    user_id: int,
-    status_value: str
-) -> None:
-    """Broadcast a user's presence status to a conversation room."""
-    await connection_manager.broadcast_to_room(
-        conversation_id=conversation_id,
-        payload={
-            "type": "presence",
-            "data": {
-                "user_id": user_id,
-                "status": status_value
             }
         }
     )
@@ -160,8 +196,7 @@ async def dispatch_event(
         )
 
     if event_type in {"typing_start", "typing_stop"}:
-        data = payload.get("data")
-        if not isinstance(data, dict):
+        if not isinstance(payload.get("data"), dict):
             await send_error_event(
                 websocket=websocket,
                 message="Invalid typing event payload"
@@ -188,7 +223,12 @@ async def websocket_endpoint(
     token: str | None = Query(default=None),
     db: Session = Depends(get_db)
 ) -> None:
-    """Authenticate and join a conversation-scoped WebSocket room."""
+    """Authenticate a user, join a room, and process realtime events."""
+    # Accept the connection before sending any close/error frames.
+    # The WebSocket protocol requires the handshake to be completed
+    # before the server can send a close frame.
+    await websocket.accept()
+
     if token is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -198,11 +238,6 @@ async def websocket_endpoint(
             token=token,
             db=db
         )
-    except HTTPException:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    try:
         ensure_conversation_member(
             db=db,
             conversation_id=conversation_id,
@@ -212,20 +247,21 @@ async def websocket_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    connection_manager.join_room(
+        conversation_id=conversation_id,
+        user_id=user.id,
+        websocket=websocket
+    )
     await connection_manager.connect(
         user_id=user.id,
         websocket=websocket
     )
-    connection_manager.join_room(
-        conversation_id=conversation_id,
-        user_id=user.id
-    )
-    connection_manager.mark_online(user.id)
     await broadcast_presence_event(
         conversation_id=conversation_id,
         user_id=user.id,
         status_value="online"
     )
+
     try:
         while True:
             try:
@@ -251,14 +287,18 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         pass
     finally:
-        connection_manager.mark_offline(user.id)
-        await broadcast_presence_event(
-            conversation_id=conversation_id,
+        went_offline = connection_manager.disconnect(
             user_id=user.id,
-            status_value="offline"
+            websocket=websocket
         )
         connection_manager.leave_room(
             conversation_id=conversation_id,
-            user_id=user.id
+            user_id=user.id,
+            websocket=websocket
         )
-        connection_manager.disconnect(user.id)
+        if went_offline:
+            await broadcast_presence_event(
+                conversation_id=conversation_id,
+                user_id=user.id,
+                status_value="offline"
+            )

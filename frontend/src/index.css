@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 215 27.9% 16.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%; /* #3B82F6 */
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%; /* #EF4444 */
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142.1 70.6% 45.3%; /* #22C55E */
+    --success-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+
+    --radius: 0.75rem; /* 12px */
+
+    /* Custom values for ChatSphere */
+    --bg-surface: 215 27.9% 16.9%; /* #1E293B */
+    --bg-background: 222.2 84% 4.9%; /* #0F172A */
+    --bg-sidebar: 222.2 84% 4.9%; /* Wait #111827 is 221 39% 11% */
+  }
+
+  .dark {
+    --background: 222.2 47.4% 11.2%; /* #0F172A is approx 222 47% 11% */
+    --foreground: 210 40% 98%;
+
+    --card: 215 27.9% 16.9%; /* #1E293B */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 215 27.9% 16.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%; /* #3B82F6 */
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%; /* #EF4444 */
+    --destructive-foreground: 210 40% 98%;
+    
+    --success: 142.1 70.6% 45.3%; /* #22C55E */
+    --success-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-color: #0F172A; /* Strict override for body background */
+  }
+}
