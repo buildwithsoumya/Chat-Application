@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chatsphere-postgres
+    environment:
+      POSTGRES_USER: chatsphere
+      POSTGRES_PASSWORD: chatsphere
+      POSTGRES_DB: chatsphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - chatsphere_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatsphere -d chatsphere"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  chatsphere_pg_data:

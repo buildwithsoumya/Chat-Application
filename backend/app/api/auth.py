@@ -79,10 +79,10 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    email = form_data.username
-    user = get_user_by_email(
+    username = form_data.username
+    user = get_user_by_username(
         db,
-        email
+        username
     )
     if not user:
         raise HTTPException(

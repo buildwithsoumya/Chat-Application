@@ -10,14 +10,14 @@ interface ConversationListProps {
 }
 
 export function ConversationList({ onSelectConversation }: ConversationListProps) {
-  const { 
-    conversations, 
-    fetchConversations, 
-    isLoading, 
-    selectedConversation, 
-    selectConversation 
+  const {
+    conversations,
+    fetchConversations,
+    isLoading,
+    selectedConversation,
+    selectConversation
   } = useChatStore()
-   
+
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
 
@@ -44,27 +44,27 @@ export function ConversationList({ onSelectConversation }: ConversationListProps
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-4 py-3 sticky top-0 bg-sidebar z-10 border-b border-border/50">
+      <div className="px-4 py-3 sticky top-0 z-10 border-b border-border/30">
         <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
           <Input
             type="search"
             placeholder="Search conversations..."
-            className="pl-9 bg-surface/50 border-transparent focus-visible:ring-1 focus-visible:ring-primary h-9"
+            className="pl-9 bg-white/[0.03] border-border/40 focus-visible:border-blue-500/40 focus-visible:ring-1 focus-visible:ring-blue-500/20 h-9 rounded-lg text-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
-      
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-transparent">
-              <Skeleton className="h-10 w-10 rounded-full" />
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl">
+              <Skeleton className="h-11 w-11 rounded-full" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3.5 w-24 rounded" />
+                <Skeleton className="h-3 w-32 rounded" />
               </div>
             </div>
           ))
@@ -84,8 +84,8 @@ export function ConversationList({ onSelectConversation }: ConversationListProps
             />
           ))
         ) : (
-          <div className="text-center p-4 text-sm text-muted-foreground mt-4">
-            {searchQuery ? "No conversations found matching your search." : "No conversations yet."}
+          <div className="text-center p-6 text-sm text-muted-foreground mt-4">
+            {searchQuery ? "No conversations found." : "No conversations yet."}
           </div>
         )}
       </div>

@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import { authService, type LoginFormData, type RegisterFormData } from '@/services/auth'
+import { authService, type LoginFormData, type RegisterFormData, type UpdateProfileData } from '@/services/auth'
 
 export interface User {
   id: string
   username: string
   email: string
   avatar?: string
+  bio?: string
 }
 
 interface AuthState {
@@ -18,6 +19,7 @@ interface AuthState {
   initializeAuth: () => Promise<void>
   login: (data: LoginFormData) => Promise<void>
   register: (data: Omit<RegisterFormData, "confirmPassword">) => Promise<void>
+  updateProfile: (data: UpdateProfileData) => Promise<void>
   logout: () => void
   clearError: () => void
 }
@@ -41,7 +43,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await authService.getCurrentUser(token);
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch {
-      // Token is invalid, expired, or the user no longer exists.
       localStorage.removeItem('token');
       set({ user: null, token: null, isAuthenticated: false, isLoading: false });
     }
@@ -52,11 +53,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await authService.login(data)
       localStorage.setItem('token', response.token)
-      set({ 
-        user: response.user, 
+      set({
+        user: response.user,
         token: response.token,
-        isAuthenticated: true, 
-        isLoading: false 
+        isAuthenticated: true,
+        isLoading: false
       })
     } catch (error: any) {
       const message = error.response?.data?.detail || error.message || "Failed to login"
@@ -69,12 +70,21 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null })
     try {
       await authService.register(data)
-      // We don't get a token back on register in this API, so user must login after
-      set({ 
-        isLoading: false 
-      })
+      set({ isLoading: false })
     } catch (error: any) {
       const message = error.response?.data?.detail || error.message || "Failed to register"
+      set({ error: message, isLoading: false })
+      throw error
+    }
+  },
+
+  updateProfile: async (data: UpdateProfileData) => {
+    set({ isLoading: true, error: null })
+    try {
+      const updatedUser = await authService.updateProfile(data)
+      set({ user: updatedUser, isLoading: false })
+    } catch (error: any) {
+      const message = error.response?.data?.detail || error.message || "Failed to update profile"
       set({ error: message, isLoading: false })
       throw error
     }

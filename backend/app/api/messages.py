@@ -35,7 +35,8 @@ def create_message(
         db=db,
         conversation_id=payload.conversation_id,
         sender_id=current_user.id,
-        content=payload.content
+        content=payload.content,
+        attachment=payload.attachment
     )
 
 

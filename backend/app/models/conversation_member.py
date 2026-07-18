@@ -26,3 +26,8 @@ class ConversationMember(Base):
         default=utc_now,
         nullable=False
     )
+    last_read_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utc_now,
+        nullable=False
+    )

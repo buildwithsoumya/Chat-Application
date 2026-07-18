@@ -2,7 +2,7 @@ import { api } from "@/lib/axios";
 import { z } from "zod";
 
 export const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -26,6 +26,13 @@ export interface User {
   username: string;
   email: string;
   avatar?: string;
+  bio?: string;
+}
+
+export interface UpdateProfileData {
+  username?: string;
+  bio?: string;
+  avatar?: string;
 }
 
 export interface LoginResponse {
@@ -35,9 +42,8 @@ export interface LoginResponse {
 
 export const authService = {
   async login(data: LoginFormData): Promise<{ token: string; user: User }> {
-    // FastAPI OAuth2PasswordRequestForm expects x-www-form-urlencoded
     const formData = new URLSearchParams();
-    formData.append("username", data.email); // FastAPI expects 'username' field for email
+    formData.append("username", data.username);
     formData.append("password", data.password);
 
     const response = await api.post<LoginResponse>("/auth/login", formData, {
@@ -45,16 +51,11 @@ export const authService = {
         "Content-Type": "application/x-www-form-urlencoded",
       },
     });
-    
+
     const token = response.data.access_token;
-    
-    // Fetch the user data using the token
     const user = await authService.getCurrentUser(token);
 
-    return {
-      token,
-      user
-    };
+    return { token, user };
   },
 
   async register(data: Omit<RegisterFormData, "confirmPassword">): Promise<User> {
@@ -68,6 +69,11 @@ export const authService = {
       headers.Authorization = `Bearer ${token}`;
     }
     const response = await api.get<User>("/users/me", { headers });
+    return response.data;
+  },
+
+  async updateProfile(data: UpdateProfileData): Promise<User> {
+    const response = await api.patch<User>("/users/me", data);
     return response.data;
   },
 

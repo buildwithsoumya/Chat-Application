@@ -23,4 +23,8 @@ export const conversationService = {
     const response = await api.post<Conversation>("/conversations", data);
     return response.data;
   },
+
+  async markAsRead(conversationId: string): Promise<void> {
+    await api.post(`/conversations/${conversationId}/read`);
+  },
 };

@@ -31,7 +31,12 @@ class Message(Base):
     )
     content: Mapped[str] = mapped_column(
         Text,
-        nullable=False
+        nullable=False,
+        default=""
+    )
+    attachment: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
